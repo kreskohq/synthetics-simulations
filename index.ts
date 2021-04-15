@@ -11,15 +11,15 @@ class Erc20Token {
 
   constructor(public name: string) {}
 
-  mint(minter: string, amount: number) {
-    if (!this.balances[minter]) {
-      this.balances[minter] = 0;
+  mint(to: string, amount: number) {
+    if (!this.balances[to]) {
+      this.balances[to] = 0;
     }
-    this.balances[minter] += amount;
+    this.balances[to] += amount;
   }
 
   balanceOf(name: string) {
-    return this.balances[name] ?? 0;
+    return this.balances[name] || 0;
   }
 
   transfer(from: string, to: string, amount: number) {
@@ -43,19 +43,11 @@ class Erc20Token {
   }
 }
 
-const tokens: { [x: string]: Erc20Token } = {
-  [cUSD]: new Erc20Token(cUSD),
-
-  [kTSLA]: new Erc20Token(kTSLA),
-  [kGOOG]: new Erc20Token(kGOOG),
-  [kAPPL]: new Erc20Token(kAPPL),
-
-  [kUSDkTSLA]: new Erc20Token(kUSDkTSLA),
-  [kUSDkGOOG]: new Erc20Token(kUSDkGOOG),
-  [kUSDkAPPL]: new Erc20Token(kUSDkAPPL),
-};
-
+const tokens: { [x: string]: Erc20Token } = {};
 function Token(name: string) {
+  if (!tokens[name]) {
+    tokens[name] = new Erc20Token(name);
+  }
   return tokens[name];
 }
 
@@ -92,12 +84,12 @@ class Pair {
 }
 
 class Uniswap {
-  pairs = {};
+  pairs: { [x: string]: Pair } = {};
 
   constructor() {}
 
   static getPairId(token0: string, token1: string) {
-    const id = [token0, token1].sort().join('-');
+    const id = `UniSwap-${[token0, token1].sort().join('-')}`;
     return id;
   }
 
@@ -120,10 +112,6 @@ class Kresko {
     [kAPPL]: 90,
   };
 
-  totalDebt = 0;
-
-  balances = {};
-
   targetCollateralisationRatio = 5;
 
   constructor() {
@@ -137,7 +125,7 @@ class Kresko {
         const update = Math.random() * 100 < volatilities[stock.name];
         if (update) {
           const up = Math.random() < 0.5;
-          const deviation = Math.random() * 5;
+          const deviation = Math.random() * 3;
           this.updatePrice(
             stock.name,
             up
@@ -154,20 +142,11 @@ class Kresko {
   }
 
   addCollateral(user: string, name: string, amount: number) {
-    if (!this.balances[user]) {
-      this.balances[user] = {};
-    }
-
-    if (!this.balances[user][name]) {
-      this.balances[user][name] = 0;
-    }
-
     const minted =
       amount / this.targetCollateralisationRatio / this.prices[name];
 
     Token(cUSD).transfer(user, 'Kresko', amount);
-    // Token(`kUSD${name}`).transfer()
-    this.balances[user][name] += amount;
+    Token(`kUSD${name}`).mint(user, amount);
     Token(name).mint(user, minted);
   }
 
@@ -175,13 +154,9 @@ class Kresko {
     return this.prices[name] ?? 0;
   }
 
-  getAssetBalance(user: string, name: string) {
-    return this.balances[user]?.[name] ?? 0;
-  }
-
   getRatio(user: string, name: string) {
     return (
-      (this.getAssetBalance(user, name) /
+      (Token(`kUSD${name}`).balanceOf(user) /
         (this.getPrice(name) * Token(name).balanceOf(user))) *
       100
     );
@@ -195,33 +170,37 @@ class Kresko {
   }
 }
 
-const users = ['Jeff', 'Tim', 'Steve'];
+function logMinterStatistics(users: User[], k: Kresko) {
+  const assets = {};
+  for (const user of users) {
+    assets[user.name] = {};
+    for (const stock of k.getWhitelistedAssets()) {
+      const assetPrice = k.getPrice(stock.name);
+      const assetCount = Token(stock.name).balanceOf(user.name);
+      const tableHeader = `${stock.name} $${assetPrice.toFixed(2)}`;
+      const dollarValue = (assetCount * assetPrice).toFixed();
+      const ratio = k.getRatio(user.name, stock.name).toFixed();
+      assets[user.name][
+        tableHeader
+      ] = `${assetCount.toFixed()} ($${dollarValue}) (CR ${ratio}%)`;
+    }
+  }
+  console.table(assets);
+}
 
 async function main() {
   const k = new Kresko();
 
-  for (const { name } of k.getWhitelistedAssets()) {
-    for (const user of users) {
-      k.addCollateral(user, name, Math.random() * 10000);
+  const minters = [new User('John'), new User('Tim'), new User('Steve')];
+  for (const stock of k.getWhitelistedAssets()) {
+    for (const user of minters) {
+      Token(cUSD).mint(user.name, 100_000);
+      k.addCollateral(user.name, stock.name, Math.random() * 10_000);
     }
   }
 
   setInterval(() => {
-    const assets = {};
-    for (const user of users) {
-      assets[user] = {};
-      for (const stock of k.getWhitelistedAssets()) {
-        const assetPrice = k.getPrice(stock.name);
-        const assetCount = Token(stock.name).balanceOf(user);
-        const tableHeader = `${stock.name} $${assetPrice.toFixed(2)}`;
-        const dollarValue = (assetCount * assetPrice).toFixed();
-        const ratio = k.getRatio(user, stock.name).toFixed();
-        assets[user][
-          tableHeader
-        ] = `${assetCount.toFixed()} ($${dollarValue}) (CR ${ratio}%)`;
-      }
-    }
-    console.table(assets);
+    logMinterStatistics(minters, k);
   }, 2000);
 
   await new Promise((resolve) => setTimeout(resolve, 1000 * 60 * 60 * 24));
@@ -231,14 +210,6 @@ async function uniswap() {
   const uni = new Uniswap();
   const k = new Kresko();
 
-  const john = new User('John');
-  const tim = new User('Tim');
-  const steve = new User('Steve');
-
-  Token(cUSD).mint(john.name, 100_000);
-  Token(cUSD).mint(tim.name, 100_000);
-  Token(cUSD).mint(steve.name, 100_000);
-
   uni.addPair(cUSD, kTSLA);
   uni.addPair(cUSD, kGOOG);
   uni.addPair(cUSD, kAPPL);
@@ -246,18 +217,40 @@ async function uniswap() {
   uni.addPair(kGOOG, kAPPL);
   uni.addPair(kTSLA, kAPPL);
 
-  k.addCollateral(john.name, kTSLA, 1000);
+  const minters = [new User('John'), new User('Tim'), new User('Steve')];
+  for (const stock of k.getWhitelistedAssets()) {
+    for (const minter of minters) {
+      Token(cUSD).mint(minter.name, 100_000);
+      k.addCollateral(minter.name, stock.name, Math.random() * 50_000);
+    }
+  }
+  logMinterStatistics(minters, k);
 
-  console.log(
-    '>>>',
-    Token(cUSD).balanceOf(john.name),
-    Token(kTSLA).balanceOf(john.name)
-  );
-  // john.addLiquidity(cUSD, kTSLA);
+  for (const stock of k.getWhitelistedAssets()) {
+    for (const minter of minters) {
+      const stockBalance = Token(stock.name).balanceOf(minter.name);
+      const usdAmount = stockBalance * k.getPrice(stock.name);
+      minter.addLiquidity(cUSD, usdAmount, stock.name, stockBalance);
+    }
+  }
+
+  logMinterStatistics(minters, k);
+
+  // const traders = [new User(''), new User(''), new User('')];
+
+  // john.addLiquidity(cUSD, 100, kTSLA, 10);
+
+  // const pair = uni.getPair(cUSD, kTSLA);
+  // pair.swap(john.name, 5, cUSD, kTSLA);
+
+  // console.table({
+  //   JOHN_cUSD: Token(cUSD).balanceOf(john.name),
+  //   JOHN_kTLSA: Token(kTSLA).balanceOf(john.name),
+  // });
 }
 
-main()
-  // uniswap()
+// main()
+uniswap()
   .then(() => process.exit(0))
   .catch((e) => {
     console.log(e);
