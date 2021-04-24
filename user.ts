@@ -1,12 +1,4 @@
-import {
-  Token,
-  kAPPL,
-  kGOOG,
-  kTSLA,
-  kUSDkAPPL,
-  kUSDkGOOG,
-  kUSDkTSLA,
-} from './token';
+import { Token, kAPPL, kGOOG, kTSLA, cUSD } from './token';
 import { Uniswap } from './uniswap';
 
 export class User {
@@ -21,5 +13,14 @@ export class User {
     const pairAddress = Uniswap.getPairId(token0, token1);
     Token(token0).transfer(this.name, pairAddress, amount0);
     Token(token1).transfer(this.name, pairAddress, amount1);
+  }
+
+  getBalances() {
+    return {
+      [cUSD]: Token(cUSD).balanceOf(this.name),
+      [kAPPL]: Token(kAPPL).balanceOf(this.name),
+      [kGOOG]: Token(kGOOG).balanceOf(this.name),
+      [kTSLA]: Token(kTSLA).balanceOf(this.name),
+    };
   }
 }

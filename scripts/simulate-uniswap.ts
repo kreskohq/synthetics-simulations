@@ -1,5 +1,5 @@
 import { Kresko } from '../kresko';
-import { cUSD, kAPPL, Token, kGOOG, kTSLA, kUSDkAPPL } from '../token';
+import { cUSD, kAPPL, Token, kGOOG, kTSLA } from '../token';
 import { Uniswap } from '../uniswap';
 import { User } from '../user';
 import { logMinterStatistics } from '../utils';
@@ -47,7 +47,31 @@ async function uniswap() {
   // });
 }
 
-uniswap()
+async function main() {
+  const root = new User('Root');
+  Token(cUSD).mint(root.name, 100_000);
+
+  const alex = new User('Alex');
+  Token(cUSD).mint(alex.name, 100);
+
+  const uni = new Uniswap();
+  uni.addPair(cUSD, kTSLA);
+
+  root.addLiquidity(cUSD, 1000, kTSLA, 10);
+
+  const pair = uni.getPair(cUSD, kTSLA);
+
+  console.log('Balances before');
+  console.table(alex.getBalances());
+  pair.swap(alex.name, 100, cUSD, kTSLA);
+  console.table('Balances after');
+  console.table(alex.getBalances());
+
+  console.log('Reserves');
+  console.table(pair.getReserves());
+}
+
+main()
   .then(() => process.exit(0))
   .catch((e) => {
     console.log(e);

@@ -2,9 +2,6 @@ export const cUSD = 'cUSD';
 export const kTSLA = 'kTSLA';
 export const kGOOG = 'kGOOG';
 export const kAPPL = 'kAPPL';
-export const kUSDkAPPL = 'kUSDkAPPL';
-export const kUSDkTSLA = 'kUSDkTSLA';
-export const kUSDkGOOG = 'kUSDkGOOG';
 
 class Erc20Token {
   balances = {};
